@@ -1,0 +1,112 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: dev1
+spec:
+  podSelector: {}
+  ingress: []
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: bookinfo-productpage-ingress-from-envoy
+  namespace: dev1
+spec:
+  podSelector:
+    matchLabels:
+      app: productpage
+  ingress:
+  - ports:
+    - port: 9080
+    from:
+    - namespaceSelector:
+        matchLabels:
+          app: ingress
+      podSelector:           
+        matchLabels:
+          app: envoy
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: bookinfo-reviews-ingress-from-productpage
+  namespace: dev1
+spec:
+  podSelector:
+    matchLabels:
+      app: reviews
+  ingress:
+  - ports:
+    - port: 9080
+    from:
+      - podSelector:
+          matchLabels:
+            app: productpage
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: bookinfo-details-ingress-from-productpage
+  namespace: dev1
+spec:
+  podSelector:
+    matchLabels:
+      app: details
+  ingress:
+  - ports:
+    - port: 9080
+    from:
+      - podSelector:
+          matchLabels:
+            app: productpage
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: bookinfo-ratings-ingress-from-reviews
+  namespace: dev1
+spec:
+  podSelector:
+    matchLabels:
+      app: ratings
+  ingress:
+  - ports:
+    - port: 9080
+    from:
+      - podSelector:
+          matchLabels:
+            app: reviews
+            version: v2
+      - podSelector:
+          matchLabels:
+            app: reviews
+            version: v3
+---
+kind: NetworkPolicy
+apiVersion: networking.k8s.io/v1
+metadata:
+  name: bookinfo-egress
+  namespace: dev1
+spec:
+  policyTypes:
+  - Egress
+  podSelector: {}
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          owner: dev1
+      podSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          app: ingress
+      podSelector:           
+        matchLabels:
+          app: envoy
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP

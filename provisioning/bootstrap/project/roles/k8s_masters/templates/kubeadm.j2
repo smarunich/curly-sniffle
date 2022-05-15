@@ -1,0 +1,23 @@
+---
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: ClusterConfiguration
+apiServer:
+  extraArgs:
+    feature-gates: "TTLAfterFinished=true"
+    cloud-provider: aws
+clusterName: {{ inventory_hostname | regex_replace('master1.','') | regex_replace('.lab','') }}
+controlPlaneEndpoint: {{ inventory_hostname }}
+controllerManager:
+  extraArgs:
+    cloud-provider: aws
+    configure-cloud-routes: "false"
+    feature-gates: "TTLAfterFinished=true"
+kubernetesVersion: stable
+networking:
+  podSubnet: 192.168.0.0/24
+---
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: InitConfiguration
+nodeRegistration:
+  kubeletExtraArgs:
+    cloud-provider: aws

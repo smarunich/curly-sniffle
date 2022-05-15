@@ -1,0 +1,188 @@
+---
+- copy:
+    src: /home/ubuntu/.ssh/id_rsa
+    dest: /home/demo/.ssh/id_rsa
+    owner: demo
+    group: demo
+    mode: "0600"
+- file:
+    path: /etc/resolv.conf
+    state: absent
+- template:
+    src: resolv.conf.j2
+    dest: /etc/resolv.conf
+- shell: kubeadm config view
+  register: kubeadm_config
+  ignore_errors: yes
+  changed_when: "kubeadm_config.rc != 0"
+- block:
+    - apt_key:
+        url: "https://packages.cloud.google.com/apt/doc/apt-key.gpg"
+        id: "0x6A030B21BA07F4FB"
+    - apt_repository:
+        repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+        state: present
+    - apt:
+        name:
+          - docker.io
+          - kubelet
+          - kubeadm
+          - kubectl
+          - redis-tools
+          - jq
+          - awscli
+          - httpie
+          - httping
+          - python3-pip
+    - pip:
+        name:
+          - openshift
+          - kubernetes
+        extra_args: --upgrade
+    - get_url:
+        url: https://storage.googleapis.com/kubernetes-the-hard-way/cfssl/linux/cfssl
+        dest: /usr/local/bin/cfssl
+        mode: "0777"
+    - get_url:
+        url: https://storage.googleapis.com/kubernetes-the-hard-way/cfssl/linux/cfssljson
+        dest: /usr/local/bin/cfssljson
+        mode: "0777"
+    - file:
+        path: /etc/cfssl
+        state: directory
+    - copy:
+        src: "{{ item }}"
+        dest: "/etc/cfssl/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      with_items:
+        - ca-config.json
+        - ca-csr.json
+    - shell:
+        chdir: /etc/cfssl
+        cmd: cfssl gencert -initca -config /etc/cfssl/ca-config.json ca-csr.json | cfssljson -bare ca
+        creates: /etc/cfssl/ca.pem
+    - file:
+        path: /etc/cfssl/ca-key.pem
+        owner: root
+        group: root
+        mode: "0644"
+    - copy:
+        src: daemon.json
+        dest: /etc/docker/daemon.json
+    - file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+    - systemd:
+        name: docker
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+    - user:
+        name: demo
+        groups: docker
+    - uri:
+        url: "http://169.254.169.254/latest/meta-data/local-hostname"
+        return_content: yes
+      register: aws_hostname
+    - debug:
+        var: aws_hostname.content
+    - debug:
+        var: ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0])
+    - hostname:
+        name: "{{ aws_hostname.content }}"
+    - service:
+        name: kubelet
+        state: started
+        enabled: true
+    - template:
+        src: kubeadm.j2
+        dest: /home/ubuntu/kubeadm.yaml
+    - shell: kubeadm init --config=/home/ubuntu/kubeadm.yaml
+      register: kubeadm_init
+    - file:
+        path: "/home/{{ item }}/.kube"
+        state: directory
+      loop:
+        - ubuntu
+        - demo
+    - copy:
+        remote_src: yes
+        src: /etc/kubernetes/admin.conf
+        dest: "/home/{{ item }}/.kube/config"
+        owner: "{{ item }}"
+        group: "{{ item }}"
+      loop:
+        - ubuntu
+        - demo
+    - shell: kubeadm token list | grep authentication | cut -d' ' -f1
+      register: kubeadm_token
+    - shell: openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //'
+      register: kubeadm_hash
+    - shell: "redis-cli -h jumpbox.pod.lab hset {{ inventory_hostname }} kubeadm_token {{ kubeadm_token.stdout }}"
+      register: redis_kubeadm_token
+    - shell: "redis-cli -h jumpbox.pod.lab hset {{ inventory_hostname }} kubeadm_hash {{ kubeadm_hash.stdout }}"
+      register: redis_kubeadm_hash
+    - shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf label node {{ awslocalhostname }} lab_name={{ inventory_hostname }}"
+    - shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f https://docs.projectcalico.org/manifests/calico.yaml"
+  when: kubeadm_config.rc > 0
+
+- name: Pause for cluster to finish the initialization
+  pause:
+    minutes: 2
+
+- shell: curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+
+- get_url:
+    url: https://github.com/projectcalico/calicoctl/releases/download/v3.16.3/calicoctl
+    dest: /usr/local/bin/calicoctl
+    mode: "0755"
+
+- lineinfile:
+    path: /home/ubuntu/.bashrc
+    line: "{{ item }}"
+  with_items:
+    - "export CALICO_KUBECONFIG=~/.kube/config"
+    - "export CALICO_DATASTORE_TYPE=kubernetes"
+
+#- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f https://docs.projectcalico.org/manifests/calicoctl.yaml"
+#- lineinfile:
+#    path: /home/ubuntu/.bashrc
+#    line: 'alias calicoctl="kubectl exec -i -n kube-system calicoctl -- /calicoctl"'
+
+# - name: Create Namespace dev1
+#   community.kubernetes.k8s:
+#     api_version: v1
+#     kind: Namespace
+#     name: dev1
+#     state: present
+#     kubeconfig: /etc/kubernetes/admin.conf
+
+- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf create ns dev1"
+- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf label namespace dev1 app=bookinfo"
+- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf label namespace dev1 owner=dev1"
+
+# Install app from https://istio.io/latest/docs/examples/bookinfo/ into dev1 namespace
+- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf -n dev1 apply -f https://raw.githubusercontent.com/istio/istio/release-1.7/samples/bookinfo/platform/kube/bookinfo.yaml"
+
+# Compile manifest templates
+# - template:
+#     src: "{{ item }}.j2"
+#     dest: "/home/ubuntu/{{ item }}"
+#   loop:
+#     - bookinfo-ingress.yaml
+
+# - copy:
+#     src: "{{ item }}"
+#     dest: "/home/ubuntu/{{ item }}"
+#     mode: "0644"
+#   with_items:
+#     - bookinfo-policy-networking.k8s.io.yaml
+#     - bookinfo-policy-projectcalico.org.yaml
+
+# Apply manifest templates
+- shell: kubectl --kubeconfig /etc/kubernetes/admin.conf -n dev1 apply -f /home/ubuntu/{{ item }}
+  loop:
+    - bookinfo-ingress.yaml
+    - bookinfo-policy-networking.k8s.io.yaml
