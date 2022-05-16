@@ -5,15 +5,16 @@ users:
     gecos: Demo Administrator
     lock_passwd: true
     shell: /bin/bash
-    sudo:  ALL=(ALL) NOPASSWD:ALL
+    sudo: ALL=(ALL) NOPASSWD:ALL
     ssh_authorized_keys:
       - ${pubkey}
 
 packages:
   - language-pack-en
-#  - python-minimal
-#  - python3-requests
+  #  - python-minimal
+  #  - python3-requests
   - python3-redis
+  - python3-psutil
 
 write_files:
   - content: |

@@ -85,3 +85,5 @@ terraform.tfstate
 terraform.tfstate.backup
 .terraform.lock*
 keys/
+*-kubeconfig
+.DS*

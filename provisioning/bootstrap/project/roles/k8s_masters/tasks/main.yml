@@ -16,9 +16,7 @@
   ignore_errors: yes
   changed_when: "kubeadm_config.rc != 0"
 - block:
-    - apt_key:
-        url: "https://packages.cloud.google.com/apt/doc/apt-key.gpg"
-        id: "0x6A030B21BA07F4FB"
+    - shell: curl -f https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
     - apt_repository:
         repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
         state: present
@@ -146,43 +144,9 @@
     - "export CALICO_KUBECONFIG=~/.kube/config"
     - "export CALICO_DATASTORE_TYPE=kubernetes"
 
-#- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f https://docs.projectcalico.org/manifests/calicoctl.yaml"
-#- lineinfile:
-#    path: /home/ubuntu/.bashrc
-#    line: 'alias calicoctl="kubectl exec -i -n kube-system calicoctl -- /calicoctl"'
+- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf create ns bookinfo"
+- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf label namespace bookinfo  istio-injection=enabled"
 
-# - name: Create Namespace dev1
-#   community.kubernetes.k8s:
-#     api_version: v1
-#     kind: Namespace
-#     name: dev1
-#     state: present
-#     kubeconfig: /etc/kubernetes/admin.conf
+# Install app from https://istio.io/latest/docs/examples/bookinfo/ into bookinfo namespace
 
-- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf create ns dev1"
-- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf label namespace dev1 app=bookinfo"
-- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf label namespace dev1 owner=dev1"
-
-# Install app from https://istio.io/latest/docs/examples/bookinfo/ into dev1 namespace
-- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf -n dev1 apply -f https://raw.githubusercontent.com/istio/istio/release-1.7/samples/bookinfo/platform/kube/bookinfo.yaml"
-
-# Compile manifest templates
-# - template:
-#     src: "{{ item }}.j2"
-#     dest: "/home/ubuntu/{{ item }}"
-#   loop:
-#     - bookinfo-ingress.yaml
-
-# - copy:
-#     src: "{{ item }}"
-#     dest: "/home/ubuntu/{{ item }}"
-#     mode: "0644"
-#   with_items:
-#     - bookinfo-policy-networking.k8s.io.yaml
-#     - bookinfo-policy-projectcalico.org.yaml
-
-# Apply manifest templates
-- shell: kubectl --kubeconfig /etc/kubernetes/admin.conf -n dev1 apply -f /home/ubuntu/{{ item }}
-  loop:
-    - bookinfo-ingress.yaml
-    - bookinfo-policy-networking.k8s.io.yaml
+- shell: "kubectl --kubeconfig /etc/kubernetes/admin.conf -n bookinfo apply -f https://raw.githubusercontent.com/istio/istio/release-1.7/samples/bookinfo/platform/kube/bookinfo.yaml"

@@ -1,9 +1,9 @@
 ---
-apiVersion: kubeadm.k8s.io/v1beta2
+apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
 apiServer:
   extraArgs:
-    feature-gates: "TTLAfterFinished=true"
+    feature-gates: "TopologyAwareHints=true"
     cloud-provider: aws
 clusterName: {{ inventory_hostname | regex_replace('master1.','') | regex_replace('.lab','') }}
 controlPlaneEndpoint: {{ inventory_hostname }}
@@ -11,7 +11,7 @@ controllerManager:
   extraArgs:
     cloud-provider: aws
     configure-cloud-routes: "false"
-    feature-gates: "TTLAfterFinished=true"
+    feature-gates: "TopologyAwareHints=true"
 kubernetesVersion: stable
 networking:
   podSubnet: 192.168.0.0/24

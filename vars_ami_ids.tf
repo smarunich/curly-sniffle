@@ -4,7 +4,7 @@ variable "ami_ubuntu" {
   type        = map(string)
   description = "Ubuntu Bionic Beaver AMI by region updated 14/10/20"
 
-  default = { 
-    us-west-2 = "ami-0f846ea6472ae64f0"
+  default = {
+    us-west-2 = "ami-07e60b7f43b05d68e"
   }
 }
